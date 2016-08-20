@@ -35,7 +35,6 @@
 #define CRLF "\r\n"
 
 #define STRLEN(string) (sizeof(string)/sizeof(string[0]) - 1)
-#define END_HEADER(buffer) strcat(buffer, "\r\n");
 
 /*
  *   TODO:
@@ -298,20 +297,39 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-//TODO finish
-int recv_all(int sockfd, char* buf, int buf_len)
-{
-  int recv_status = recv(sockfd, buf, buf_len, 0);
-  
-  return recv_status;
-}
-
 int end_strncmp(char* s1, char* s2, int n)
 {
   int len1 = strlen(s1);
   int len2 = strlen(s2);
   if(n > len1 || n > len2)  return -1;
   return strcmp(&s1[len1 - n], &s2[len2 - n]);
+}
+
+
+// returns 0 on connection closed, -1 on error, -2 on full buffer
+int recv_all(int sockfd, char* buf, int buf_len)
+{
+  int bytes_read = 0;
+  int recv_status = recv(sockfd, buf, buf_len-1, 0);
+  printf("recv_status = %d\n", recv_status);
+  return recv_status;
+  
+  //While not error, or still reading bytes (to avoid infinite loop)
+  while(recv_status > 0) {
+    if(end_strncmp(buf, CRLF CRLF, 4) == 0) {
+      return recv_status; 
+    }
+    bytes_read += recv_status;
+
+    if((buf_len -1 - bytes_read) == 0) { 
+      // If buffer is full, return -2 to signify full buffer
+      return -2;
+    }
+    recv_status = recv(sockfd, buf, buf_len - 1 - bytes_read, 0);
+  }
+
+  // Return with either -1 (error) or with 0 (connection closed)
+  return recv_status;
 }
 
 //Callback function for SIGCHLD signals
@@ -419,9 +437,12 @@ int main(int argc, char* argv[])
       //Child process
       close(sockfd);  //Child doesn't need access to the listener
 
-      //TODO: Finish recv_all code
       char request_buffer[REQUEST_BUFFER_SIZE];
-      recv_all(new_fd, request_buffer, REQUEST_BUFFER_SIZE);
+      if(recv_all(new_fd, request_buffer, REQUEST_BUFFER_SIZE) >= 0) {
+        send_http_error_response(new_fd, 500);
+        exit(1);
+      }
+      
 
       /* Check if bad request before processing */
 
