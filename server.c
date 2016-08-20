@@ -438,7 +438,7 @@ int main(int argc, char* argv[])
       close(sockfd);  //Child doesn't need access to the listener
 
       char request_buffer[REQUEST_BUFFER_SIZE];
-      if(recv_all(new_fd, request_buffer, REQUEST_BUFFER_SIZE) >= 0) {
+      if(recv_all(new_fd, request_buffer, REQUEST_BUFFER_SIZE) < 0) {
         send_http_error_response(new_fd, 500);
         exit(1);
       }
