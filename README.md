@@ -11,7 +11,7 @@ The current method for serving clients is to ``` listen() ``` on parent process,
 
 
 ### Things to add
-- Check if the request uri is a directory, if there is no index.html or home.html, list out the directory contents in a  ``` <ul> ```
+- List out the directory contents in a  ``` <ul> ```
 - Prevent client from being able to access above running directory with malcious GET requests
 - Look into using ``` select() ``` and NONBLOCKING mode on sockets to find a faster way to serve files
 - Add ability to check content types from a mime.types file (Currently hardcoded in)
