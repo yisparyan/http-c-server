@@ -545,21 +545,44 @@ int main(int argc, char* argv[])
         //Check if file descriptor does not point to a file
         if(!S_ISREG(filestat.st_mode)) { 
           close(fd);
-              
           //Check if points to directory
           if(S_ISDIR(filestat.st_mode)) {
 
-            //Check if /index.html exists and 301 redirect to add '/'
+            //Check if /index.html or /home.html exists and 301 redirect w/ '/'
             if(resource_path[strlen(resource_path)-1] != '/') {
+              
+              //Check for /index.html first
               strcat(resource_path, "/index.html");
               if(stat(resource_path, &filestat) == -1) {
-                send_http_error_response(new_fd, 404);
-                exit(0);
+                if(errno != ENOENT) {
+                  send_http_error_response(new_fd, 500);
+                  exit(1);
+                }
+                //No /index.html, try /home.html
+                int pos = strlen(resource_path) - strlen("/index.html");
+                resource_path[pos] = '\0';
+                strcat(resource_path, "/home.html");
+
+                if(stat(resource_path, &filestat) == -1) {
+                  printf("HERE\n");
+                  if(errno == ENOENT) {
+                    send_http_error_response(new_fd, 404);
+                    exit(0);
+                  }
+                  send_http_error_response(new_fd, 500);
+                  exit(1);
+                }
+                //Otherwise, able to find /home.html, prep for 301, and continue
+                resource_path[strlen(resource_path)-strlen("home.html")] = '\0';
               }
-              if(S_ISREG(filestat.st_mode)) {
-                //Set resource path to add '/' to request uri, remove "index.html"
+              else {
+                //Yes, /index.html exists, prepwork for redirect
                 resource_path[strlen(resource_path)-strlen("index.html")] = '\0';
-                
+              }
+
+              //Verify it is a file (might not be)
+              if(S_ISREG(filestat.st_mode)) {
+                //Build and send 301 redirect
                 insert_header(&headers, "Location", &resource_path[1]);
                 char response_buffer[RESPONSE_BUFFER_SIZE] = {0};
                 int msgsize = build_http_response_header(response_buffer, 
@@ -571,17 +594,31 @@ int main(int argc, char* argv[])
                 send_all(new_fd, response_buffer, msgsize);
                 exit(0);                                 
               }
+              //Not a file, so file does not exist
               send_http_error_response(new_fd, 404);
               exit(0);
             }
 
-            //Try to see if there is a index.html file at the directory
+            //Check if index.html exists
             strcat(resource_path, "index.html");
-            
             fd = open(resource_path, O_RDONLY, S_IREAD);
             if(fd == -1) {
-              send_http_error_response(new_fd, 404);
-              exit(0);
+              if(errno != ENOENT) {
+                send_http_error_response(new_fd, 500);
+                exit(1);
+              }
+              int pos = strlen(resource_path) - strlen("index.html");
+              resource_path[pos] = '\0';
+              strcat(resource_path, "home.html");
+              fd = open(resource_path, O_RDONLY, S_IREAD);
+              if(fd == -1) {
+                if(errno == ENOENT) {
+                  send_http_error_response(new_fd, 404);
+                  exit(0);
+                }
+                send_http_error_response(new_fd, 500);
+                exit(1);
+              }
             }
 
             //Able to open a file descriptor, check if it is a regular file
