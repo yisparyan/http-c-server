@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <signal.h>
 
+#include <dirent.h>
+
 #include <string.h>
 #include <stdlib.h>
 
@@ -395,6 +397,7 @@ int main(int argc, char* argv[])
   if(p == 0) { 
     //looped through linked list and failed to find socket to bind() to
     fprintf(stderr, "server: failed to bind\n");
+    exit(1);
   }
 
 
@@ -564,7 +567,6 @@ int main(int argc, char* argv[])
                 strcat(resource_path, "/home.html");
 
                 if(stat(resource_path, &filestat) == -1) {
-                  printf("HERE\n");
                   if(errno == ENOENT) {
                     send_http_error_response(new_fd, 404);
                     exit(0);
@@ -612,12 +614,58 @@ int main(int argc, char* argv[])
               strcat(resource_path, "home.html");
               fd = open(resource_path, O_RDONLY, S_IREAD);
               if(fd == -1) {
-                if(errno == ENOENT) {
-                  send_http_error_response(new_fd, 404);
-                  exit(0);
+                if(errno != ENOENT) {
+                  send_http_error_response(new_fd, 500);
+                  exit(1);
                 }
-                send_http_error_response(new_fd, 500);
-                exit(1);
+                printf("No index.html or home.html\n");
+                //No index or home.html, display the directory in ul
+                int pos = strlen(resource_path) - strlen("home.html");
+                resource_path[pos] = '\0';
+
+                DIR* dir = opendir(resource_path);
+                if(dir == 0) {
+                  perror("opendir()");
+                  send_http_error_response(new_fd, 500);
+                  exit(1);
+                }
+
+                struct dirent *ep;
+                int num_files = 0;
+                int dirslen = 0;
+                while((ep = readdir(dir))) {
+                  num_files++;
+                  dirslen += strlen(ep->d_name);
+                }
+                
+                int msgs = STRLEN(DIRECTORY_HTML_BEGIN) + 
+                           num_files * STRLEN(DIRECTORY_HTML_OPEN_LINK 
+                                      DIRECTORY_HTML_CLOSE_LINK 
+                                      DIRECTORY_HTML_CLOSE_ITEM)  +
+                           2 * dirslen + 
+                           STRLEN(DIRECTORY_HTML_END);
+
+                char response_buffer[RESPONSE_BUFFER_SIZE] = {0};
+                int msgsize = build_http_response_header(response_buffer, 
+                                                         RESPONSE_BUFFER_SIZE,
+                                                         "text/html",
+                                                         msgs,
+                                                         200, 
+                                                         &headers);
+
+                strcat(response_buffer, DIRECTORY_HTML_BEGIN);
+                rewinddir(dir);
+                while((ep = readdir(dir))) {
+                  strcat(response_buffer, DIRECTORY_HTML_OPEN_LINK);
+                  strcat(response_buffer, ep->d_name);
+                  strcat(response_buffer, DIRECTORY_HTML_CLOSE_LINK);
+                  strcat(response_buffer, ep->d_name);
+                  strcat(response_buffer, DIRECTORY_HTML_CLOSE_ITEM);
+                }
+                strcat(response_buffer, DIRECTORY_HTML_END);
+                
+                send_all(new_fd, response_buffer, msgsize+msgs);
+                exit(0); 
               }
             }
 
