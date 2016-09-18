@@ -538,12 +538,6 @@ int main(int argc, char* argv[])
           exit(1);
         }
         
-
-        // TODO: Finish implementation of the following
-        // This code handles what happens if the file opened is not a regular
-        // file. If it is a directory, it should see if a index.html or home.hml
-        // file exist and open that, if not, it can try to find what files exist
-        // in the current directory, and list those on a html page it generates.
         
         //Check if file descriptor does not point to a file
         if(!S_ISREG(filestat.st_mode)) { 
